@@ -62,6 +62,45 @@ std::vector<std::string_view> Split(std::string_view string, char delim) {
 }
 
 /**
+ * Парсит строку вида "55.61, 37.20, 3900m to StopName, ..." и возвращает параметры остановки
+ */
+StopParameters ParseStopParameters(std::string_view str) {
+    using namespace std::literals;
+    StopParameters result;
+    std::vector<std::string_view> parameters = Split(str, ',');
+
+    static const double nan = std::nan("");
+    if (parameters.size() < 2) {
+        result.coordinates.lat = nan;
+        result.coordinates.lng = nan;
+    } else {
+        result.coordinates.lat = std::stod(std::string(parameters[0]));
+        result.coordinates.lng = std::stod(std::string(parameters[1]));
+    }
+
+    if (parameters.size() > 2) {
+        for (auto it = parameters.begin() + 2; it != parameters.end(); ++it) {
+            std::string_view str = *it;
+            size_t to_pos = str.find("to"s);
+            if (to_pos == str.npos) {
+                break;
+            }
+  
+            std::string_view distance_str = Trim(str.substr(0, to_pos));
+            distance_str.remove_suffix(1);
+            std::string_view stop_name_str = Trim(str.substr(to_pos + 2));
+
+            StopParameters::DisctanceTo dito;
+            dito.distance = std::stoi(std::string(distance_str));
+            dito.stop_name = stop_name_str;
+            result.distances.push_back(dito);
+        }
+    }
+
+    return result;
+}
+
+/**
  * Парсит маршрут.
  * Для кольцевого маршрута (A>B>C>A) возвращает массив названий остановок [A,B,C,A]
  * Для некольцевого маршрута (A-B-C-D) возвращает массив названий остановок [A,B,C,D,C,B,A]
@@ -94,9 +133,13 @@ CommandDescription ParseCommandDescription(std::string_view line) {
         return {};
     }
 
-    return {std::string(line.substr(0, space_pos)),
-            std::string(line.substr(not_space, colon_pos - not_space)),
-            std::string(line.substr(colon_pos + 1))};
+    CommandDescription cd {
+        std::string(line.substr(0, space_pos)),
+        std::string(line.substr(not_space, colon_pos - not_space)),
+        std::string(line.substr(colon_pos + 1))
+    };
+
+    return cd;
 }
 
 void InputReader::ParseLine(std::string_view line) {
@@ -108,11 +151,19 @@ void InputReader::ParseLine(std::string_view line) {
 
 void InputReader::ApplyCommands([[maybe_unused]] TransportCatalogue& catalogue) const {
     // 1. Обработать команды на добавление остановок
-    geo::Coordinates coordinates;
+    // 1.1 Добавить остановки и их координаты
+    std::vector<std::pair<std::string_view, StopParameters>> parameter_cache;
     for (const CommandDescription& command : commands_) {
         if (command.command == "Stop") {
-            coordinates = ParseCoordinates(command.description);
-            catalogue.AddStop(command.id, coordinates);
+            StopParameters parameters = ParseStopParameters(command.description);
+            catalogue.AddStop(command.id, parameters.coordinates);
+            parameter_cache.emplace_back(command.id, std::move(parameters));
+        }
+    }
+    // 1.1 Добавить расстояния между остановками
+    for (const auto& [id, parameters] : parameter_cache) {
+        for (const StopParameters::DisctanceTo& dito : parameters.distances) {
+            catalogue.AddDistance(id, dito.stop_name, dito.distance);
         }
     }
 
@@ -130,7 +181,7 @@ namespace tests {
 void ParseLine() {
     using namespace std::literals; 
     InputReader reader;
-    reader.ParseLine("Stop Tolstopaltsevo: 55.611087, 37.208290"sv);
+    reader.ParseLine("Stop Marushkino: 55.595884, 37.209755, 9900m to Rasskazovka, 100m to Marushkino"sv);
     reader.ParseLine("Bus 750: Tolstopaltsevo - Marushkino - Rasskazovka"sv);
     
     const std::vector<CommandDescription>& commands = reader.GetCommands();
@@ -138,12 +189,17 @@ void ParseLine() {
 
     const CommandDescription& command1 = commands[0];
     assert(command1.command == "Stop"s);
-    assert(command1.id == "Tolstopaltsevo"s);
-    assert(command1.description == " 55.611087, 37.208290"s);
+    assert(command1.id == "Marushkino"s);
+    assert(command1.description == " 55.595884, 37.209755, 9900m to Rasskazovka, 100m to Marushkino"s);
 
-    geo::Coordinates coordinates = ParseCoordinates(command1.description);
-    assert(coordinates.lat == 55.611087);
-    assert(coordinates.lng == 37.208290);
+    StopParameters parameters = ParseStopParameters(command1.description);
+    assert(parameters.coordinates.lat == 55.595884);
+    assert(parameters.coordinates.lng == 37.209755);
+    assert(parameters.distances.size() == 2);
+    assert(parameters.distances[0].distance == 9900);
+    assert(parameters.distances[0].stop_name == "Rasskazovka"s);
+    assert(parameters.distances[1].distance == 100);
+    assert(parameters.distances[1].stop_name == "Marushkino"s);
 
     const CommandDescription& command2 = commands[1];
     assert(command2.command == "Bus"s);

@@ -22,6 +22,15 @@ struct CommandDescription {
     std::string description;  // Параметры команды
 };
 
+struct StopParameters {
+    geo::Coordinates coordinates;
+    struct DisctanceTo {
+        int distance;
+        std::string stop_name;
+    };
+    std::vector<DisctanceTo> distances;
+};
+
 class InputReader {
 public:
     /**
