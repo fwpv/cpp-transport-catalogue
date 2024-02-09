@@ -1,8 +1,11 @@
 #include "transport_catalogue.h"
 
+#include <cmath>
 #include <cassert>
 #include <sstream>
 #include <iomanip>
+
+using namespace std::literals; 
 
 namespace tcat {
 
@@ -12,67 +15,27 @@ void TransportCatalogue::AddStop(std::string_view name, const geo::Coordinates& 
     stopname_to_stop_.emplace(placed_stop.name, &placed_stop);
 }
 
-void TransportCatalogue::AddBus(std::string_view name, const std::vector<std::string_view>& stops) {
-    buses_.push_back({std::string(name), {}});
+void TransportCatalogue::AddBus(std::string_view name,
+        const std::vector<std::string_view>& stops, bool is_roundtrip) {
+    buses_.push_back({std::string(name), {}, is_roundtrip});
     Bus& placed_bus = buses_.back();
     busname_to_bus_.emplace(placed_bus.name, &placed_bus);
     for (std::string_view stop_name : stops) {
-        Stop* stop = FindStop(stop_name);
+        const Stop* stop = FindStop(stop_name);
         placed_bus.stops.push_back(stop);
         buses_of_stop_[stop].insert(placed_bus.name);
     }
 }
 
-void TransportCatalogue::AddDistance(std::string_view start_stop, std::string_view end_stop, int distance) {
-    Stop* stop1 = FindStop(start_stop);
-    Stop* stop2 = FindStop(end_stop);
+void TransportCatalogue::AddDistance(std::string_view start, const std::string_view& end, int distance) {
+    const Stop* stop1 = FindStop(start);
+    const Stop* stop2 = FindStop(end);
     if (stop1 && stop2) {
-        distances_.emplace(std::pair<Stop*, Stop*>{stop1, stop2}, distance);
+        distances_.emplace(std::pair<const Stop*,const Stop*>{stop1, stop2}, distance);
     }
-}
-	
-std::string TransportCatalogue::BusInfo(std::string_view name) const {
-    using namespace std::literals; 
-    std::ostringstream output;
-    output << "Bus "s << name << ": "s;
-    Bus* bus = FindBus(name);
-    if (!bus) {
-        output << "not found"s;
-    } else {
-        size_t stops_on_route = bus->stops.size();
-        size_t unique_stops = CountUniqueStops(bus);
-        int route_length = CalculateRouteLength(bus);
-        double geo_route_length = CalculateGeoRouteLength(bus);
-        output << stops_on_route << " stops on route, "s
-               << unique_stops << " unique stops, "s
-               << route_length << " route length, "s
-               << route_length / geo_route_length << " curvature"s;
-    }
-    return output.str();
 }
 
-std::string TransportCatalogue::StopInfo(std::string_view name) const {
-    using namespace std::literals; 
-    std::ostringstream output;
-    output << "Stop "s << name << ": "s;
-    Stop* stop = FindStop(name);
-    if (!stop) {
-        output << "not found"s;
-    } else {
-        std::list<std::string_view> bus_list = GetBusList(stop);
-        if (bus_list.empty()) {
-            output << "no buses"s;
-        } else {
-            output << "buses"s;
-            for (std::string_view name : bus_list) {
-                output << " "s << name;
-            }
-        }
-    }
-    return output.str();
-}
-
-TransportCatalogue::Stop* TransportCatalogue::FindStop(std::string_view name) const {
+const Stop* TransportCatalogue::FindStop(std::string_view name) const {
     if (stopname_to_stop_.count(name)) {
         return stopname_to_stop_.at(name);
     } else {
@@ -80,7 +43,7 @@ TransportCatalogue::Stop* TransportCatalogue::FindStop(std::string_view name) co
     }
 }
 
-TransportCatalogue::Bus* TransportCatalogue::FindBus(std::string_view name) const {
+const Bus* TransportCatalogue::FindBus(std::string_view name) const {
     if (busname_to_bus_.count(name)) {
         return busname_to_bus_.at(name);
     } else {
@@ -88,7 +51,7 @@ TransportCatalogue::Bus* TransportCatalogue::FindBus(std::string_view name) cons
     }
 }
 
-int TransportCatalogue::FindDistance(const Stop* const start_stop, const Stop* const end_stop) const {
+int TransportCatalogue::GetDistance(const Stop* start_stop, const Stop* end_stop) const {
     std::pair<const Stop*, const Stop*> ps {start_stop, end_stop};
     if (distances_.count(ps)) {
         return distances_.at(ps);
@@ -100,12 +63,25 @@ int TransportCatalogue::FindDistance(const Stop* const start_stop, const Stop* c
     return 0;
 }
 
-size_t TransportCatalogue::CountUniqueStops(const TransportCatalogue::Bus* const bus) const {
-    const std::unordered_set<Stop*> us = {bus->stops.begin(), bus->stops.end()};
-    return us.size();
+std::vector<const Bus*> TransportCatalogue::GetAllBuses() const {
+    std::vector<const Bus*> container;
+    container.reserve(buses_.size());
+    for (const Bus& bus : buses_) {
+        container.push_back(&bus);
+    }
+    return container;
 }
 
-double TransportCatalogue::CalculateGeoRouteLength(const TransportCatalogue::Bus* const bus) const {
+std::vector<const Stop*> TransportCatalogue::GetAllStops() const {
+std::vector<const Stop*> container;
+    container.reserve(buses_.size());
+    for (const Stop& stop : stops_) {
+        container.push_back(&stop);
+    }
+    return container;
+}
+
+double TransportCatalogue::CalculateGeoRouteLength(const Bus* bus) const {
     if (bus->stops.size() < 2) {
         return 0.0;
     }
@@ -114,37 +90,43 @@ double TransportCatalogue::CalculateGeoRouteLength(const TransportCatalogue::Bus
     for (auto it = bus->stops.begin() + 1; it < bus->stops.end(); ++it) {
         const Stop* to = *it;
         total += ComputeDistance(from->coordinates, to->coordinates);
+        if (!bus->is_roundtrip) {
+            total += ComputeDistance(to->coordinates, from->coordinates);
+        }
         from = to;
     }
     return total;
 }
 
-int TransportCatalogue::CalculateRouteLength(const Bus* const bus) const {
+int TransportCatalogue::CalculateRouteLength(const Bus* bus) const {
     if (bus->stops.size() < 2) {
-        return 0.0;
+        return 0;
     }
     const Stop* from = bus->stops[0];
     int total = 0;
     for (auto it = bus->stops.begin() + 1; it < bus->stops.end(); ++it) {
         const Stop* to = *it;
-        total += FindDistance(from, to);
+        total += GetDistance(from, to);
+        if (!bus->is_roundtrip) {
+            total += GetDistance(to, from);
+        }
         from = to;
     }
     return total;
 }
 
-std::list<std::string_view> TransportCatalogue::GetBusList(TransportCatalogue::Stop* stop) const {
-    if (buses_of_stop_.count(stop) == 0) {
-        return {};
+const std::set<std::string_view>*
+        TransportCatalogue::GetBusNamesByStop(const Stop* stop) const {
+    if (buses_of_stop_.count(stop)) {
+        return &buses_of_stop_.at(stop);
+    } else {
+        return nullptr;
     }
-    const std::set<std::string_view>& buses = buses_of_stop_.at(stop);
-    return {buses.begin(), buses.end()};
 }
 
 namespace tests {
 
 void GettingBusInfo() {
-    using namespace std::literals; 
     TransportCatalogue catalogue;
 
     catalogue.AddStop("Tolstopaltsevo"sv, {55.611087, 37.208290});
@@ -173,23 +155,42 @@ void GettingBusInfo() {
 
     catalogue.AddBus("256"sv, {"Biryulyovo Zapadnoye"sv, "Biryusinka"sv,
         "Universam"sv, "Biryulyovo Tovarnaya"sv, "Biryulyovo Passazhirskaya"sv,
-        "Biryulyovo Zapadnoye"sv});
+        "Biryulyovo Zapadnoye"sv}, true);
 
     catalogue.AddBus("750"sv, {"Tolstopaltsevo"sv, "Marushkino"sv,
-        "Marushkino"sv, "Rasskazovka"sv, "Marushkino"sv, "Marushkino"sv, "Tolstopaltsevo"sv});
+        "Marushkino"sv, "Rasskazovka"sv}, false);
 
-    std::string info1 = catalogue.BusInfo("256"sv);
-    assert(info1 == "Bus 256: 6 stops on route, 5 unique stops, 5950 route length, 1.36124 curvature"s);
+    const Bus* bus = catalogue.FindBus("256");
+    int stops_on_route = bus->StopCount();
+    int unique_stops = bus->CountUniqueStops();
+    int route_length = catalogue.CalculateRouteLength(bus);
+    double geo_route_length = catalogue.CalculateGeoRouteLength(bus);
+    double curvature = route_length / geo_route_length;
 
-    std::string info2 = catalogue.BusInfo("750"sv);
-    assert(info2 == "Bus 750: 7 stops on route, 3 unique stops, 27400 route length, 1.30853 curvature"s);
+    assert(bus != nullptr);
+    assert(stops_on_route == 6);
+    assert(unique_stops == 5);
+    assert(route_length == 5950);
+    assert(fabs(curvature - 1.36124) < 0.00001);
+    
+    bus = catalogue.FindBus("750");
+    stops_on_route = bus->StopCount();
+    unique_stops = bus->CountUniqueStops();
+    route_length = catalogue.CalculateRouteLength(bus);
+    geo_route_length = catalogue.CalculateGeoRouteLength(bus);
+    curvature = route_length / geo_route_length;
 
-    std::string info3 = catalogue.BusInfo("751"sv);
-    assert(info3 == "Bus 751: not found"s);
+    assert(bus != nullptr);
+    assert(stops_on_route == 7);
+    assert(unique_stops == 3);
+    assert(route_length == 27400);
+    assert(fabs(curvature - 1.30853) < 0.00001);
+
+    bus = catalogue.FindBus("751");
+    assert(bus == nullptr);
 }
 
 void GettingStopInfo() {
-    using namespace std::literals; 
     TransportCatalogue catalogue;
     catalogue.AddStop("Tolstopaltsevo"sv, {55.611087, 37.208290});
     catalogue.AddStop("Marushkino"sv, {55.595884, 37.209755});
@@ -204,20 +205,28 @@ void GettingStopInfo() {
 
     catalogue.AddBus("256"sv, {"Biryulyovo Zapadnoye"sv, "Biryusinka"sv,
         "Universam"sv, "Biryulyovo Tovarnaya"sv, "Biryulyovo Passazhirskaya"sv,
-        "Biryulyovo Zapadnoye"sv});
+        "Biryulyovo Zapadnoye"sv}, true);
     catalogue.AddBus("750"sv, {"Tolstopaltsevo"sv, "Marushkino"sv,
-        "Rasskazovka"sv, "Marushkino"sv, "Tolstopaltsevo"sv});
+        "Rasskazovka"sv}, false);
      catalogue.AddBus("828"sv, {"Biryulyovo Zapadnoye"sv, "Universam"sv,
-        "Rossoshanskaya ulitsa"sv, "Biryulyovo Zapadnoye"sv});
+        "Rossoshanskaya ulitsa"sv, "Biryulyovo Zapadnoye"sv}, true);
 
-    std::string info1 = catalogue.StopInfo("Samara"sv);
-    assert(info1 == "Stop Samara: not found"s);
+    const Stop* stop = catalogue.FindStop("Samara"sv);
+    assert(stop == nullptr);
 
-    std::string info2 = catalogue.StopInfo("Prazhskaya"sv);
-    assert(info2 == "Stop Prazhskaya: no buses"s);
+    stop = catalogue.FindStop("Prazhskaya"sv);
+    assert(stop != nullptr);
+    const std::set<std::string_view>* bus_set_ptr = catalogue.GetBusNamesByStop(stop);
+    assert(bus_set_ptr == nullptr);
 
-    std::string info3 = catalogue.StopInfo("Biryulyovo Zapadnoye"sv);
-    assert(info3 == "Stop Biryulyovo Zapadnoye: buses 256 828"s);
+    stop = catalogue.FindStop("Biryulyovo Zapadnoye"sv);
+    assert(stop != nullptr);
+    bus_set_ptr = catalogue.GetBusNamesByStop(stop);
+    assert(bus_set_ptr != nullptr);
+    assert(bus_set_ptr->size() == 2);
+    auto item = bus_set_ptr->begin();
+    assert(*item == "256"sv);
+    assert(*(++item) == "828"sv);
 }
 
 }

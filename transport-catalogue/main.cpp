@@ -1,56 +1,38 @@
-#include <iostream>
-#include <string>
-
-#include "input_reader.h"
-#include "stat_reader.h"
+#include "json_reader.h"
+#include "map_renderer.h"
+#include "request_handler.h"
 #include "transport_catalogue.h"
+
+#include <cassert>
+#include <iostream>
+#include <sstream>
 
 using namespace std;
 
-template <typename TestFunc>
-void RunTestImpl(const TestFunc& func, const string& test_name) {
-    func();
-    cerr << test_name << " OK"s << endl;
-}
-
-#define RUN_TEST(func) RunTestImpl(func, #func)
-
-void RunAllTests() {
-    RUN_TEST(tcat::tests::ParseLine);
-    RUN_TEST(tcat::tests::GettingBusInfo);
-    RUN_TEST(tcat::tests::GettingStopInfo);
-    RUN_TEST(tcat::tests::ParseRequest);
-
-    cerr << "All test passed!"s << std::endl;
-}
-
 int main() {
-    // Тесты мешают пройти проверку тренажёра
-    // RunAllTests();
-    // return 0;
-    
     tcat::TransportCatalogue catalogue;
+    renderer::MapRenderer map_renderer;
+    const handler::RequestHandler request_handler(catalogue, map_renderer);
+    JsonReader json_reader(catalogue, map_renderer, request_handler);
 
-    int base_request_count;
-    cin >> base_request_count >> ws;
+    // Прочитать json::Document из cin
+    const json::Document input_document = json::Load(cin);
+    const json::Node& root = input_document.GetRoot();
+    const json::Dict& top_level_obj = root.AsMap();
+    
+    // Заполнить справочник
+    const json::Node& base_req_node = top_level_obj.at("base_requests"s);
+    json_reader.PopulateCatalogue(base_req_node);
 
-    {
-        tcat::InputReader reader;
-        for (int i = 0; i < base_request_count; ++i) {
-            string line;
-            getline(cin, line);
-            reader.ParseLine(line);
-        }
-        reader.ApplyCommands(catalogue);
-    }
+    // Прочитать настройки рендера
+    const json::Node& render_settings_node = top_level_obj.at("render_settings"s);
+    json_reader.ReadRenderSettings(render_settings_node);
 
-    int stat_request_count;
-    cin >> stat_request_count >> ws;
-    for (int i = 0; i < stat_request_count; ++i) {
-        string line;
-        getline(cin, line);
-        tcat::ParseAndPrintStat(catalogue, line, cout);
-    }
-
-    return 0;
+    // Запросить данные из справочника
+    const json::Node& stat_req_node = top_level_obj.at("stat_requests"s);
+    json::Array answers = json_reader.ProcessStatRequests(stat_req_node);
+    const json::Document output_document{answers};
+    
+    // Вывести ответный json::Document в cout
+    json::Print(output_document, cout);
 }
