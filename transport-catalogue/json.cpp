@@ -382,41 +382,41 @@ void PrintNode(const Node& node, const PrintContext& ctx) {
 }  // namespace
 
 bool Node::IsInt() const {
-    return std::holds_alternative<int>(var_);
+    return std::holds_alternative<int>(*this);
 }
 
 bool Node::IsDouble() const {
-    return std::holds_alternative<int>(var_)
-           || std::holds_alternative<double>(var_);
+    return std::holds_alternative<int>(*this)
+           || std::holds_alternative<double>(*this);
 }
 
 bool Node::IsPureDouble() const {
-    return std::holds_alternative<double>(var_);
+    return std::holds_alternative<double>(*this);
 }
 
 bool Node::IsBool() const {
-    return std::holds_alternative<bool>(var_);
+    return std::holds_alternative<bool>(*this);
 }
 
 bool Node::IsString() const {
-    return std::holds_alternative<std::string>(var_);
+    return std::holds_alternative<std::string>(*this);
 }
 
 bool Node::IsNull() const {
-    return std::holds_alternative<std::nullptr_t>(var_);
+    return std::holds_alternative<std::nullptr_t>(*this);
 }
 
 bool Node::IsArray() const {
-    return std::holds_alternative<Array>(var_);
+    return std::holds_alternative<Array>(*this);
 }
 
 bool Node::IsMap() const {
-    return std::holds_alternative<Dict>(var_);
+    return std::holds_alternative<Dict>(*this);
 }
 
 int Node::AsInt() const {
     if (IsInt()) {
-        return std::get<int>(var_);
+        return std::get<int>(*this);
     } else {
         throw std::logic_error("The node is not an integer"s);
     }
@@ -424,7 +424,7 @@ int Node::AsInt() const {
 
 bool Node::AsBool() const {
     if (IsBool()) {
-        return std::get<bool>(var_);
+        return std::get<bool>(*this);
     } else {
         throw std::logic_error("The node is not a boolean"s);
     }
@@ -432,9 +432,9 @@ bool Node::AsBool() const {
 
 double Node::AsDouble() const {
     if (IsPureDouble()) {
-        return std::get<double>(var_);
+        return std::get<double>(*this);
     } else if (IsInt()) {
-        return static_cast<double>(std::get<int>(var_));
+        return static_cast<double>(std::get<int>(*this));
     } else {
         throw std::logic_error("The node is not a double"s);
     }
@@ -442,7 +442,7 @@ double Node::AsDouble() const {
 
 const std::string& Node::AsString() const {
     if (IsString()) {
-        return std::get<std::string>(var_);
+        return std::get<std::string>(*this);
     } else {
         throw std::logic_error("The node is not a string"s);
     }
@@ -450,7 +450,7 @@ const std::string& Node::AsString() const {
 
 const Array& Node::AsArray() const {
     if (IsArray()) {
-        return std::get<Array>(var_);
+        return std::get<Array>(*this);
     } else {
         throw std::logic_error("The node is not an array"s);
     }
@@ -458,14 +458,14 @@ const Array& Node::AsArray() const {
 
 const Dict& Node::AsMap() const {
     if (IsMap()) {
-        return std::get<Dict>(var_);
+        return std::get<Dict>(*this);
     } else {
         throw std::logic_error("The node is not a map"s);
     }
 }
 
 bool Node::operator==(const Node& rhs) const {
-    return this->var_ == rhs.var_;
+    return GetValue() == rhs.GetValue();
 }
 
 bool Node::operator!=(const Node& rhs) const {

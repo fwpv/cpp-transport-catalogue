@@ -23,16 +23,12 @@ public:
     using runtime_error::runtime_error;
 };
 
-class Node {
+using Value = std::variant<std::nullptr_t, Array, Dict, bool, int, double, std::string>;
+
+class Node : private Value {
 public:
-    using Value = std::variant<std::nullptr_t, Array, Dict, bool, int, double, std::string>;
-
+    using variant::variant;
     Node() = default;
-
-    template <typename T>
-    Node(T value)
-        : var_(std::move(value)) {
-    }
 
     bool IsInt() const;
     bool IsDouble() const;
@@ -43,7 +39,7 @@ public:
     bool IsArray() const;
     bool IsMap() const;
 
-    const Value& GetValue() const { return var_; }
+    const Value& GetValue() const { return *this; }
     int AsInt() const;
     bool AsBool() const;
     double AsDouble() const;
@@ -53,9 +49,6 @@ public:
 
     bool operator==(const Node& rhs) const;
     bool operator!=(const Node& rhs) const;
-
-private:
-    Value var_;
 };
 
 class Document {
