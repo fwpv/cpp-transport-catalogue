@@ -21,7 +21,7 @@ public:
     void PopulateCatalogue(const json::Node& base_req_node);
 
     // Обработать запросы к базе и сформировать ответ в формате JSON-массива
-    json::Array ProcessStatRequests(const json::Node& stat_req_node) const;
+    json::Node ProcessStatRequests(const json::Node& stat_req_node) const;
 
     // Прочитать настройки map_renderer из JSON-ноды
     void ReadRenderSettings(const json::Node& render_settings_node);

@@ -18,7 +18,7 @@ int main() {
     // Прочитать json::Document из cin
     const json::Document input_document = json::Load(cin);
     const json::Node& root = input_document.GetRoot();
-    const json::Dict& top_level_obj = root.AsMap();
+    const json::Dict& top_level_obj = root.AsDict();
     
     // Заполнить справочник
     const json::Node& base_req_node = top_level_obj.at("base_requests"s);
@@ -30,7 +30,7 @@ int main() {
 
     // Запросить данные из справочника
     const json::Node& stat_req_node = top_level_obj.at("stat_requests"s);
-    json::Array answers = json_reader.ProcessStatRequests(stat_req_node);
+    json::Node answers = json_reader.ProcessStatRequests(stat_req_node);
     const json::Document output_document{answers};
     
     // Вывести ответный json::Document в cout

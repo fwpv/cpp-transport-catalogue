@@ -1,3 +1,4 @@
+#include "json_builder.h"
 #include "json_reader.h"
 #include "map_renderer.h"
 #include "request_handler.h"
@@ -46,7 +47,7 @@ void JsonReader::PopulateCatalogue(const json::Node& base_req_node) {
     const json::Array& req_array = base_req_node.AsArray();
     // Добавить остановки и их координаты
     for (const json::Node& node : req_array) {
-        const json::Dict& obj = node.AsMap();
+        const json::Dict& obj = node.AsDict();
         if (obj.at("type"s).AsString() == "Stop"s) {
             const std::string& name = obj.at("name"s).AsString();
             double latitude = obj.at("latitude"s).AsDouble();
@@ -57,10 +58,10 @@ void JsonReader::PopulateCatalogue(const json::Node& base_req_node) {
     }
     // Добавить расстояния между остановками
     for (const json::Node& node : req_array) {
-        const json::Dict& obj = node.AsMap();
+        const json::Dict& obj = node.AsDict();
         if (obj.at("type"s).AsString() == "Stop"s) {
             const std::string& name = obj.at("name"s).AsString();
-            const json::Dict& dist_obj = obj.at("road_distances"s).AsMap();
+            const json::Dict& dist_obj = obj.at("road_distances"s).AsDict();
             for (const auto& [key, distance_node] : dist_obj) {
                 db_.AddDistance(name, key, distance_node.AsInt());
             }
@@ -68,7 +69,7 @@ void JsonReader::PopulateCatalogue(const json::Node& base_req_node) {
     }
     // Добавить маршруты
     for (const json::Node& node : req_array) {
-        const json::Dict& obj = node.AsMap();
+        const json::Dict& obj = node.AsDict();
         if (obj.at("type"s).AsString() == "Bus"s) {
             const std::string& name = obj.at("name"s).AsString();
             const json::Array& stops_array = obj.at("stops"s).AsArray();
@@ -82,57 +83,59 @@ void JsonReader::PopulateCatalogue(const json::Node& base_req_node) {
     }
 }
 
-json::Array JsonReader::ProcessStatRequests(const json::Node& stat_req_node) const {
-    json::Array result{};
+json::Node JsonReader::ProcessStatRequests(const json::Node& stat_req_node) const {
+    json::Builder builder{};
+    json::ArrayValueContext array_builder = builder.StartArray();
     const json::Array& req_array = stat_req_node.AsArray();
     for (const json::Node& req_node : req_array) {
-        const json::Dict& req_obj = req_node.AsMap();
+        const json::Dict& req_obj = req_node.AsDict();
 
         // Прочитать ключ запроса
         int id = req_obj.at("id"s).AsInt();
         const std::string& type = req_obj.at("type"s).AsString();
 
         // Сформировать ответ в зависимости от типа запроса
-        json::Dict answer_obj{};
-        answer_obj.emplace("request_id"s, id);
+        json::DictItemContext dict_builder = array_builder.StartDict();
+        dict_builder.Key("request_id"s).Value(id);
         if (type == "Map"s) {
             svg::Document document = handler_.RenderMap();
             std::ostringstream out;
             document.Render(out);
-            answer_obj.emplace("map"s, out.str());
+            dict_builder.Key("map"s).Value(out.str());
         } else if (type == "Bus"s) {
             const std::string& name = req_obj.at("name"s).AsString();
             std::optional<handler::BusStat> stat = handler_.GetBusStat(name);
             if (!stat) {
-                answer_obj.emplace("error_message"s, "not found"s);
+                dict_builder.Key("error_message"s).Value("not found"s);
             } else {
-                answer_obj.emplace("curvature"s, stat->curvature);
-                answer_obj.emplace("route_length"s, stat->route_length);
-                answer_obj.emplace("stop_count"s, stat->stop_count);
-                answer_obj.emplace("unique_stop_count"s, stat->unique_stop_count);
+                dict_builder.Key("curvature"s).Value(stat->curvature)
+                    .Key("route_length"s).Value(stat->route_length)
+                    .Key("stop_count"s).Value(stat->stop_count)
+                    .Key("unique_stop_count"s).Value(stat->unique_stop_count);
             }
 
         } else if (type == "Stop"s) {
             const std::string& name = req_obj.at("name"s).AsString();
             const std::set<std::string_view>* bus_set_ptr = handler_.GetBusNamesByStop(name);
             if (!bus_set_ptr) {
-                answer_obj.emplace("error_message"s, "not found"s);
+                dict_builder.Key("error_message"s).Value("not found"s);
             } else {
-                json::Array buses_array{};
+                json::ArrayValueContext array_builder = dict_builder.Key("buses"s).StartArray();
                 for (const std::string_view bus_name : *bus_set_ptr) {
-                    buses_array.emplace_back(std::string(bus_name));
+                    array_builder.Value(std::string(bus_name));
                 }
-                answer_obj.emplace("buses"s, std::move(buses_array));
+                array_builder.EndArray();
             }
         }
-        result.emplace_back(std::move(answer_obj));
+        dict_builder.EndDict();
     }
-    return result;
+    array_builder.EndArray();
+    return builder.Build();
 }
 
 void JsonReader::ReadRenderSettings(const json::Node& render_settings_node) {
     renderer::MapRenderer::RenderSettings settings;
-    const json::Dict& obj = render_settings_node.AsMap();
+    const json::Dict& obj = render_settings_node.AsDict();
 
     settings.width = obj.at("width"s).AsDouble();
     settings.height = obj.at("height"s).AsDouble();
