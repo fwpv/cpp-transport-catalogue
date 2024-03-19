@@ -41,7 +41,7 @@ Node LoadDict(std::istream& input) {
             std::string key = LoadString(input).AsString();
             if (input >> c && c == ':') {
                 if (dict.find(key) != dict.end()) {
-                    throw ParsingError("Duplicate key '"s + key + "' have been found");
+                    throw ParsingError("Duplicate key '"s + key + "' have been founds");
                 }
                 dict.emplace(std::move(key), LoadNode(input));
             } else {
@@ -63,7 +63,7 @@ Node LoadString(std::istream& input) {
     std::string s;
     while (true) {
         if (it == end) {
-            throw ParsingError("String parsing error");
+            throw ParsingError("String parsing error"s);
         }
         const char ch = *it;
         if (ch == '"') {
@@ -72,7 +72,7 @@ Node LoadString(std::istream& input) {
         } else if (ch == '\\') {
             ++it;
             if (it == end) {
-                throw ParsingError("String parsing error");
+                throw ParsingError("String parsing error"s);
             }
             const char escaped_char = *(it);
             switch (escaped_char) {

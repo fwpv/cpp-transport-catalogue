@@ -3,10 +3,11 @@
 #include "map_renderer.h"
 #include "request_handler.h"
 #include "transport_catalogue.h"
+#include "transport_router.h"
 
 #include <cassert>
-#include <utility>
 #include <sstream>
+#include <utility>
 
 using namespace std::literals;
 
@@ -37,9 +38,10 @@ namespace {
 }
 
 JsonReader::JsonReader(tcat::TransportCatalogue& db, renderer::MapRenderer& map_renderer,
-        const handler::RequestHandler& handler)
+        trouter::TransportRouter& router, handler::RequestHandler& handler)
     : db_(db)
     , map_renderer_(map_renderer)
+    , transport_router_(router)
     , handler_(handler) {
 }
 
@@ -126,6 +128,35 @@ json::Node JsonReader::ProcessStatRequests(const json::Node& stat_req_node) cons
                 }
                 array_builder.EndArray();
             }
+        } else if (type == "Route"s) {
+            const std::string& from = req_obj.at("from"s).AsString();
+            const std::string& to = req_obj.at("to"s).AsString();
+            std::optional<trouter::RouteInfo> route_info = handler_.BuildRoute(from, to);
+            if (!route_info) {
+                dict_builder.Key("error_message"s).Value("not found"s);
+            } else {
+                dict_builder.Key("total_time"s).Value(route_info->total_time);
+                json::ArrayValueContext array_builder = dict_builder.Key("items"s).StartArray();
+                for (trouter::RouteInfo::Item& item : route_info->parts) {
+                    json::DictItemContext item_dict_builder = array_builder.StartDict();
+                    if (std::holds_alternative<trouter::WaitItem>(item)) {
+                        trouter::WaitItem& wait_item = std::get<trouter::WaitItem>(item);
+                        item_dict_builder.Key("type"s).Value("Wait");
+                        item_dict_builder.Key("stop_name"s).Value(std::string(wait_item.stop_name));
+                        item_dict_builder.Key("time"s).Value(wait_item.time);
+                    } else if (std::holds_alternative<trouter::BusItem>(item)) {
+                        trouter::BusItem& bus_item = std::get<trouter::BusItem>(item);
+                        item_dict_builder.Key("type"s).Value("Bus");
+                        item_dict_builder.Key("bus"s).Value(std::string(bus_item.bus_name));
+                        item_dict_builder.Key("span_count"s).Value(bus_item.span_count);
+                        item_dict_builder.Key("time"s).Value(bus_item.time);
+                    }
+                    item_dict_builder.EndDict();
+                }
+                array_builder.EndArray();
+            }
+        } else {
+            dict_builder.Key("error_message"s).Value("unknown request type"s);
         }
         dict_builder.EndDict();
     }
@@ -160,4 +191,15 @@ void JsonReader::ReadRenderSettings(const json::Node& render_settings_node) {
     }
 
     map_renderer_.SetRenderSettings(settings);
+}
+
+void JsonReader::ReadRoutingSettings(const json::Node& routing_settings_node) {
+    trouter::TransportRouter::RoutingSettings settings;
+
+    const json::Dict& obj = routing_settings_node.AsDict();
+
+    settings.bus_wait_time = obj.at("bus_wait_time"s).AsDouble();
+    settings.bus_velocity = obj.at("bus_velocity"s).AsDouble();
+
+    transport_router_.SetRoutingSettings(settings);
 }

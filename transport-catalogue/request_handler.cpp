@@ -1,14 +1,16 @@
+#include "domain.h"
+#include "map_renderer.h"
 #include "request_handler.h"
 #include "transport_catalogue.h"
-#include "map_renderer.h"
-#include "domain.h"
 
 namespace handler {
 
 RequestHandler::RequestHandler(const tcat::TransportCatalogue& db,
-        const renderer::MapRenderer& map_renderer)
+        const renderer::MapRenderer& map_renderer,
+        trouter::TransportRouter& transport_router)
     : db_(db)
-    , map_renderer_(map_renderer) {
+    , map_renderer_(map_renderer)
+    , transport_router_(transport_router) {
 }
 
 std::optional<BusStat>
@@ -50,9 +52,17 @@ svg::Document RequestHandler::RenderMap() const {
         });
 
     // Отобразить карту маршрутов в формате svg::Document
-    svg::Document container;
-    map_renderer_.RenderMap(buses, container);
-    return container;
+    return map_renderer_.RenderMap(buses);
 }
 
+std::optional<trouter::RouteInfo>
+        RequestHandler::BuildRoute(std::string_view from, std::string_view to) {
+    if (!transport_router_.IsRouterInitialized()) {
+        transport_router_.InitRouter(db_);
+    }
+    const tcat::Stop* from_stop = db_.FindStop(from);
+    const tcat::Stop* to_stop = db_.FindStop(to);
+
+    return transport_router_.BuildRoute(from_stop, to_stop);
+}
 }

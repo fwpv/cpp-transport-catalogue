@@ -1,9 +1,9 @@
 #include "transport_catalogue.h"
 
-#include <cmath>
 #include <cassert>
-#include <sstream>
+#include <cmath>
 #include <iomanip>
+#include <sstream>
 
 using namespace std::literals; 
 
@@ -73,12 +73,16 @@ std::vector<const Bus*> TransportCatalogue::GetAllBuses() const {
 }
 
 std::vector<const Stop*> TransportCatalogue::GetAllStops() const {
-std::vector<const Stop*> container;
+    std::vector<const Stop*> container;
     container.reserve(buses_.size());
     for (const Stop& stop : stops_) {
         container.push_back(&stop);
     }
     return container;
+}
+
+size_t TransportCatalogue::GetStopCount() const {
+    return stops_.size();
 }
 
 double TransportCatalogue::CalculateGeoRouteLength(const Bus* bus) const {

@@ -6,14 +6,15 @@
  */
 
 #include "svg.h"
+#include "transport_router.h"
 
 #include <optional>
 #include <set>
 #include <string_view>
 
-// forward declarations
 namespace tcat { class TransportCatalogue; }
 namespace renderer { class MapRenderer; }
+namespace trouter { class TransportRouter; }
 
 namespace handler {
 
@@ -29,7 +30,8 @@ struct BusStat {
 class RequestHandler {
 public:
     RequestHandler(const tcat::TransportCatalogue& db,
-            const renderer::MapRenderer& map_renderer);
+            const renderer::MapRenderer& map_renderer,
+            trouter::TransportRouter& transport_router);
 
     // Возвращает информацию о маршруте (запрос Bus)
     std::optional<BusStat> GetBusStat(std::string_view bus_name) const;
@@ -38,12 +40,16 @@ public:
     const std::set<std::string_view>*
             GetBusNamesByStop(std::string_view stop_name) const;
 
-    // Отобразить карту маршрутов в формате svg::Document
+    // Отобразить карту маршрутов в формате svg::Document (запрос Map)
     svg::Document RenderMap() const;
+
+    // Построить маршрут (запрос Route)
+    std::optional<trouter::RouteInfo> BuildRoute(std::string_view from, std::string_view to);
 
 private:
     const tcat::TransportCatalogue& db_;
     const renderer::MapRenderer& map_renderer_;
+    trouter::TransportRouter& transport_router_;
 };
 
 }

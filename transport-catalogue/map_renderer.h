@@ -129,8 +129,7 @@ public:
             settings_.height, settings_.padding};
     }
 
-    void RenderMap(const std::vector<const tcat::Bus*>& buses,
-            svg::ObjectContainer& target) const;
+    svg::Document RenderMap(const std::vector<const tcat::Bus*>& buses) const;
 
 private:
     RenderSettings settings_;

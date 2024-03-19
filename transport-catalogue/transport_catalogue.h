@@ -31,6 +31,7 @@ public:
 
 	std::vector<const Bus*> GetAllBuses() const;
 	std::vector<const Stop*> GetAllStops() const;
+	size_t GetStopCount() const;
 
 	double CalculateGeoRouteLength(const Bus* bus) const;
 	int CalculateRouteLength(const Bus* bus) const;

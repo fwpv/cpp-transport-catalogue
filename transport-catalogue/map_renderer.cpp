@@ -19,8 +19,8 @@ void MapRenderer::SetRenderSettings(const RenderSettings& settings) {
     settings_ = settings;
 }
 
-void MapRenderer::RenderMap(const std::vector<const tcat::Bus*>& buses,
-        svg::ObjectContainer& target) const {
+svg::Document MapRenderer::RenderMap(const std::vector<const tcat::Bus*>& buses) const {
+    svg::Document result;
     
     // Сформировать массив уникальных остановок
     std::vector<const tcat::Stop*> stops;
@@ -99,8 +99,10 @@ void MapRenderer::RenderMap(const std::vector<const tcat::Bus*>& buses,
 
     // Отобразить все созданные изображения в формате svg::Document
     for (const std::unique_ptr<svg::Drawable>& pic : pictures) {
-        pic->Draw(target);
+        pic->Draw(result);
     }
+
+    return result;
 }
 
 BusRouteLine::BusRouteLine(const SphereProjector& projector,
