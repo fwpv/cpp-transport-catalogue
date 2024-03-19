@@ -94,7 +94,9 @@ void TransportRouter::InitRouter(const tcat::TransportCatalogue& db) {
 
                 // Определить время поездки на автобусе
                 distance += db.GetDistance(rounded_stops[to - 1], rounded_stops[to]);
-                double weight = distance / 1000.0 / settings_.bus_velocity * 60.0;
+                constexpr double meter_per_km = 1000.0;
+                constexpr double minutes_in_hour = 60.0;
+                double weight = distance / meter_per_km / settings_.bus_velocity * minutes_in_hour;
 
                 //Добавить рёбро поездки на автобус
                 graph::VertexId end_vertex_of_from = stop_ptr_to_vertex_id_.at(rounded_stops[from]) + 1;
